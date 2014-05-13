@@ -155,13 +155,6 @@ class RingsSkyMap(CachingSkyMap):
         dec = icrsCoord.getLatitude().asRadians()
 
         firstRingStart = self._ringSize*0.5 - 0.5*math.pi
-        if dec < firstRingStart:
-            # Southern cap
-            return self[0]
-        elif dec > firstRingStart*-1:
-            # Northern cap
-            return self[-1]
-
         ringNum = int((dec - firstRingStart) / self._ringSize)
 
         tractList = list()
@@ -174,8 +167,11 @@ class RingsSkyMap(CachingSkyMap):
                           (2*math.pi/self._ringNums[r]) + 0.5)
             # Adjacent tracts will also be checked.
             for t in [tractNum-1, tractNum, tractNum+1]:
-                if t < 0 or t > self._ringNums[r]-1:
-                    continue
+                # Wrap over raStart
+                if t < 0:
+                    t = t + self._ringNums[r]
+                elif t > self._ringNums[r]-1:
+                    t = t - self._ringNums[r]
 
                 index = t + 1 # Allow 1 for south pole
                 for i in range(r):
@@ -186,6 +182,20 @@ class RingsSkyMap(CachingSkyMap):
                     tractList.append(self[index])
                 except Exception, e:
                     pass
+
+        # Always check tracts at poles
+        # Southern cap
+        try:
+            patch = self[0].findPatch(coord)
+            tractList.append(self[0])
+        except Exception, e:
+            pass
+        # Northern cap
+        try:
+            patch = self[-1].findPatch(coord)
+            tractList.append(self[-1])
+        except Exception, e:
+            pass
 
         return tractList
 
