@@ -1,4 +1,5 @@
 import unittest
+import math
 
 import lsst.utils.tests
 import lsst.afw.coord
@@ -51,15 +52,26 @@ class RingsTestCase(skyMapTestCase.SkyMapTestCase):
             self.assertNotEqual(skyMap, defaultSkyMap)
 
 
+class NonzeroRaStartRingsTestCase(RingsTestCase):
+    """Test that setting raStart != 0 works"""
+    def getConfig(self):
+        config = super().getConfig()
+        config.raStart = 234
+        return config
+
+
 class HscRingsTestCase(lsst.utils.tests.TestCase):
-    def setUp(self):
-        # This matches the HSC SSP configuration, on which the problem was discovered
+    def getConfig(self):
+        """Return a configuration matching that used for the HSC SSP"""
         config = RingsSkyMap.ConfigClass()
         config.numRings = 120
         config.projection = "TAN"
         config.tractOverlap = 1.0/60  # Overlap between tracts (degrees)
         config.pixelScale = 0.168
-        self.skymap = RingsSkyMap(config)
+        return config
+
+    def setUp(self):
+        self.skymap = RingsSkyMap(self.getConfig())
 
     def tearDown(self):
         del self.skymap
@@ -79,6 +91,76 @@ class HscRingsTestCase(lsst.utils.tests.TestCase):
         for coord in coordList:
             self.skymap.findAllTracts(coord)
         self.skymap.findTractPatchList(coordList)
+
+    def testDm14809(self):
+        """Test that DM-14809 has been fixed"""
+        skyMapTestCase.checkDm14809(self, self.skymap)
+
+        # Check that the first tract in the last ring exists
+        coord = self.getFirstTractLastRingCoord()
+        tract = self.skymap.findTract(coord)
+        self.assertTrue(tract.contains(coord))
+
+    def getFirstTractLastRingCoord(self):
+        """Return the coordinates of the first tract in the last ring
+
+        This tract is missing in version=0, but this is fixed in version=1.in
+        """
+        ringNum = self.skymap.config.numRings - 1
+        ringSize = math.pi/(self.skymap.config.numRings + 1)
+        firstRingStart = ringSize*0.5 - 0.5*math.pi
+        dec = ringNum*ringSize + firstRingStart
+        return lsst.afw.geom.SpherePoint(self.skymap.config.raStart*lsst.afw.geom.degrees,
+                                         dec*lsst.afw.geom.radians)
+
+
+class Version0HscRingsTestCase(HscRingsTestCase):
+    """Testing that the version=0 RingsSkyMap works in the expected way"""
+    def setUp(self):
+        self.skymap = RingsSkyMap(self.getConfig(), version=0)
+
+    def testDm14809(self):
+        """Test that DM-14809 has been partially fixed
+
+        The observed behaviour was:
+
+            skyMap.findTract(skyMap[9712].getCtrCoord()).getId() != 9712
+
+        and
+
+            skyMap[1].getCtrCoord() == skyMap[11].getCtrCoord()
+
+        Specifically for version=0, we fixed the ``findTract`` behaviour but
+        left the tract duplication (tract 11 duplicates tract 1) and the
+        missing tract (the first tract in the last ring) so that the tract
+        numbering would remain unchanged.
+        """
+        # Check that the tract ID is that used to index the skymap
+        expect = [tract.getId() for tract in self.skymap]
+        expect[self.skymap._ringNums[0] + 1] = 1  # Due to the bug
+        got = [self.skymap.findTract(tract.getCtrCoord()).getId() for tract in self.skymap]
+        self.assertListEqual(got, expect)
+
+        # Check that the tract found for central coordinate of a tract is that tract
+        centers = set([(coord.getRa().asRadians(), coord.getDec().asRadians()) for
+                       coord in (tract.getCtrCoord() for tract in self.skymap)])
+        self.assertEqual(len(centers), len(self.skymap) - 1)  # One tract is duplicated
+        self.assertEqual(self.skymap[1].getCtrCoord(),
+                         self.skymap[self.skymap._ringNums[0] + 1].getCtrCoord())  # This is the duplicate
+
+        # Check that some particular tracts we know and love haven't moved
+        degrees = lsst.afw.geom.degrees
+        # 9712 is at RA=0, and was identified as problematic in DM-14809
+        self.assertEqual(self.skymap[9712].getCtrCoord(),
+                         lsst.afw.geom.SpherePoint(0.0*degrees, 0.7438016528925696*degrees))
+        # The Cosmos field
+        self.assertEqual(self.skymap[9813].getCtrCoord(),
+                         lsst.afw.geom.SpherePoint(150.2479338842975*degrees, 2.2314049586776834*degrees))
+
+        # Check that the first tract in the last ring does NOT exist (due to the bug)
+        coord = self.getFirstTractLastRingCoord()
+        tract = self.skymap.findTract(coord)
+        self.assertFalse(tract.contains(coord))
 
 
 class MemoryTester(lsst.utils.tests.MemoryTestCase):
