@@ -30,9 +30,9 @@ import numpy
 import sys
 import pickle
 import argparse
+from itertools import cycle
 
-from mpl_toolkits.mplot3d import Axes3D # used by fig.gca
-import matplotlib
+from mpl_toolkits.mplot3d import Axes3D  # noqa F401 used by fig.gca
 import matplotlib.pyplot as plt
 
 import lsst.afw.geom as afwGeom
@@ -169,19 +169,15 @@ def makePlotter(Projector=DefaultProjector):
         plt.clf()
         axes = plt.axes()
 
-        colorCycle = matplotlib.rcParams['axes.color_cycle']
-        for i, tract in enumerate(skyMap):
+        for tract, color in zip(skyMap, cycle("rgbcmyk")):
             center = tract.getCtrCoord()
             wcs = tract.getWcs()
             box = tract.getBBox()
             xMin, xMax, yMin, yMax = box.getMinX(), box.getMaxX(), box.getMinY(), box.getMaxY()
             num = 50
-            color = colorCycle[i % len(colorCycle)]
-            ra0 = center.getLongitude().asRadians()
-            dec0 = center.getLatitude().asRadians()
             proj = Projector(center)
             x, y = proj.project(center)
-            axes.plot(x, y, color + 'o')
+            axes.text(x, y, str(tract.getId()), color=color, ha="center", va="center")
             xList = numpy.linspace(xMin, xMax, num=num, endpoint=True)
             yList = numpy.linspace(yMin, yMax, num=num, endpoint=True)
             for xs, ys in ((xList, yMin*numpy.ones(num)),
@@ -209,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument("--style", choices=list(plotStyles.keys()), default="3d", help="Plot style to use")
     args = parser.parse_args()
 
-    with file(args.skymap[0], "r") as f:
+    with open(args.skymap[0], "rb") as f:
         skyMap = pickle.load(f)
         reportSkyMapInfo(skyMap)
         plotStyles[args.style](skyMap)
