@@ -121,7 +121,8 @@ class HscRingsTestCase(lsst.utils.tests.TestCase):
         centerRa = center.getRa().asDegrees()
         centerDec = center.getDec().asDegrees()
         for devRa in [-deviation, deviation]:
-            coord = lsst.afw.geom.SpherePoint(centerRa + devRa, centerDec, lsst.afw.geom.degrees)
+            coord = lsst.afw.coord.IcrsCoord(lsst.afw.geom.Point2D(centerRa + devRa, centerDec),
+                                             lsst.afw.geom.degrees)
             foundTractId = self.skymap.findTract(coord).getId()
             self.assertEqual(tractId, foundTractId)
 
@@ -134,8 +135,8 @@ class HscRingsTestCase(lsst.utils.tests.TestCase):
         ringSize = math.pi/(self.skymap.config.numRings + 1)
         firstRingStart = ringSize*0.5 - 0.5*math.pi
         dec = ringNum*ringSize + firstRingStart
-        return lsst.afw.geom.SpherePoint(self.skymap.config.raStart*lsst.afw.geom.degrees,
-                                         dec*lsst.afw.geom.radians)
+        return lsst.afw.coord.IcrsCoord(self.skymap.config.raStart*lsst.afw.geom.degrees,
+                                        dec*lsst.afw.geom.radians)
 
 
 class Version0HscRingsTestCase(HscRingsTestCase):
@@ -177,10 +178,10 @@ class Version0HscRingsTestCase(HscRingsTestCase):
         degrees = lsst.afw.geom.degrees
         # 9712 is at RA=0, and was identified as problematic in DM-14809
         self.assertEqual(self.skymap[9712].getCtrCoord(),
-                         lsst.afw.geom.SpherePoint(0.0*degrees, 0.7438016528925696*degrees))
+                         lsst.afw.coord.IcrsCoord(0.0*degrees, 0.7438016528925696*degrees))
         # The Cosmos field
         self.assertEqual(self.skymap[9813].getCtrCoord(),
-                         lsst.afw.geom.SpherePoint(150.2479338842975*degrees, 2.2314049586776834*degrees))
+                         lsst.afw.coord.IcrsCoord(150.2479338842975*degrees, 2.2314049586776834*degrees))
 
         # Check that the first tract in the last ring does NOT exist (due to the bug)
         coord = self.getFirstTractLastRingCoord()
